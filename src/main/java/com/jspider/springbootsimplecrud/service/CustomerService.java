@@ -1,63 +1,148 @@
 package com.jspider.springbootsimplecrud.service;
 
-import java.util.List;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
-import org.hibernate.annotations.Comment;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
-import com.jspider.springbootsimplecrud.Exception.IdNotFoundException;
 import com.jspider.springbootsimplecrud.dao.CustomerDao;
 import com.jspider.springbootsimplecrud.dto.Customer;
+import com.jspider.springbootsimplecrud.exception.IdNotFoundException;
 import com.jspider.springbootsimplecrud.response.ApplicationResponse;
 
 @Service
 public class CustomerService {
-	
-	@Autowired
-	private CustomerDao customerDao;
-	
-	@Autowired
-	private ApplicationResponse<Customer> applicationResponse;
 
+	private final CustomerDao customerDao;
+	private final ApplicationResponse<Customer> applicationResponse;
+
+	@Autowired
+	public CustomerService(CustomerDao customerDao, ApplicationResponse<Customer> applicationResponse) {
+		this.customerDao = customerDao;
+		this.applicationResponse = applicationResponse;
+	}
+
+	/**
+	 * Saves a new customer to the database.
+	 *
+	 * @param customer The customer object to be saved.
+	 * @return An ApplicationResponse containing the result of the operation.
+	 */
 	public ApplicationResponse<Customer> saveCustomerService(Customer customer) {
-		Customer savedCustomer = customerDao.saveCustomerDao(customer);
-		if(savedCustomer!=null) {
-			applicationResponse.setStatusCode(HttpStatus.CREATED.value());
-			applicationResponse.setStatusMsg("Data Stored Successfully");
-//			applicationResponse.setDescription("I have created save data API");
-			applicationResponse.setData(customer);
-			return applicationResponse;
+		Customer existingCustomer = customerDao.getCustomerByEmailDao(customer.getEmail());
+		if (existingCustomer != null) {
+			return createResponse(HttpStatus.BAD_REQUEST.value(), "Duplicate Data Entry.", customer);
 		}
-		else {
-			applicationResponse.setStatusCode(HttpStatus.NOT_ACCEPTABLE.value());
-			applicationResponse.setStatusMsg("Could Not Store Information, Please Varify Your Data.");
-//			applicationResponse.setDescription("");
-			applicationResponse.setData(savedCustomer);
-			return applicationResponse;
+
+		Customer processedCustomer = ServiceUtils.trimExtraSpaces(customer);
+		Customer savedCustomer = customerDao.saveCustomerDao(processedCustomer);
+
+		if (savedCustomer == null) {
+			return createResponse(HttpStatus.INTERNAL_SERVER_ERROR.value(), "We're Sorry. Please Try Again Later",
+					null);
 		}
-	}
-	
-	public List<Customer> getAllCustomerDetailsFilterByNameService(String name) {
-		return customerDao.getAllCustomerDao().stream().filter(a -> a.getName().equals(name)).toList();
+		return createResponse(HttpStatus.OK.value(), "Data Stored Successfully", savedCustomer);
 	}
 
-	public ApplicationResponse<Customer> getCustomerByIdService(int id){
+	/**
+	 * Retrieves a customer by their ID.
+	 *
+	 * @param id The ID of the customer to retrieve.
+	 * @return An ApplicationResponse containing the result of the operation.
+	 * @throws IdNotFoundException if the customer with the given ID is not found.
+	 */
+	public ApplicationResponse<Customer> getCustomerByIdService(int id) {
 		Customer customer = customerDao.getCustomerById(id);
-		if(customer!=null) {
-			applicationResponse.setStatusCode(HttpStatus.CREATED.value());
-			applicationResponse.setStatusMsg("Data Fetched Successfully");
-//			applicationResponse.setDescription("I have created save data API");
-			applicationResponse.setData(customer);
-			return applicationResponse;
-		}
-		else {
+		if (customer != null) {
+			return createResponse(HttpStatus.OK.value(), "Data Fetched Successfully", customer);
+		} else {
 			throw new IdNotFoundException("Given Id Not Found...");
 		}
 	}
 
-}
+	/**
+	 * Retrieves all customer details with pagination and sorting.
+	 *
+	 * @param page          The page number (zero-based) to retrieve.
+	 * @param size          The number of items per page.
+	 * @param sortBy        The field to sort by.
+	 * @param sortDirection The direction of the sort ("asc" or "desc").
+	 * @return A Page object containing the requested Customer objects.
+	 * @throws IllegalArgumentException if the sortBy field does not exist in the
+	 *                                  Customer entity.
+	 */
+	public Page<Customer> getAllCustomerDetails(int page, int size, String sortBy, String sortDirection) {
+		if (page < 0 || size < 0) {
+			throw new IllegalArgumentException("Page and size parameters must be non-negative.");
+		}
 
-//@Service-It is used to tell the compiler that we are writing business logic or service login in the class.
-//@Autowired-It is used to create instance of class.
+		Sort.Direction direction = sortDirection.equalsIgnoreCase("desc") ? Sort.Direction.DESC : Sort.Direction.ASC;
+		Sort sort = Sort.by(direction, sortBy);
+		Pageable pageRequest = PageRequest.of(page, size, sort);
+
+		return customerDao.fetchCustomerByPageDao(pageRequest);
+	}
+
+	/**
+	 * Deletes a customer by their ID.
+	 *
+	 * @param customerId The ID of the customer to delete.
+	 * @return An ApplicationResponse containing the result of the operation.
+	 */
+	public ApplicationResponse<Customer> deleteCustomerByIdService(int customerId) {
+		Customer existingCustomer = customerDao.getCustomerById(customerId);
+		if (existingCustomer == null) {
+			return createResponse(HttpStatus.NOT_FOUND.value(), "Customer Not Found", null);
+		}
+
+		boolean isDeleted = customerDao.deleteCustomerByIdDao(customerId);
+		if (isDeleted) {
+			return createResponse(HttpStatus.OK.value(), "Customer Deleted Successfully", existingCustomer);
+		} else {
+			return createResponse(HttpStatus.INTERNAL_SERVER_ERROR.value(), "Failed to Delete Customer",
+					existingCustomer);
+		}
+	}
+
+	/**
+	 * Updates an existing customer's information.
+	 *
+	 * @param customer The Customer object containing updated information.
+	 * @return An ApplicationResponse containing the result of the update operation.
+	 */
+	public ApplicationResponse<Customer> updateCustomerService(Customer customer) {
+		Customer existingCustomer = customerDao.getCustomerById(customer.getId());
+		if (existingCustomer == null) {
+			return createResponse(HttpStatus.NOT_FOUND.value(), "Customer not found", customer);
+		}
+
+		Customer processedCustomer = ServiceUtils.trimExtraSpaces(customer);
+		Customer updatedCustomer = customerDao.updateCustomerDao(processedCustomer);
+
+		if (updatedCustomer == null) {
+			return createResponse(HttpStatus.INTERNAL_SERVER_ERROR.value(), "Failed to update customer", customer);
+		}
+
+		return createResponse(HttpStatus.OK.value(), "Customer updated successfully", updatedCustomer);
+	}
+
+	/**
+	 * Helper method to create a standardized ApplicationResponse.
+	 * 
+	 * @param statusValue The HTTP status code of the response
+	 * @param message     A descriptive message about the response
+	 * @param data        The Customer data associated with the response
+	 * @return An ApplicationResponse object with the provided details
+	 */
+	private ApplicationResponse<Customer> createResponse(int statusValue, String message, Customer data) {
+		applicationResponse.setStatusCode(statusValue);
+		applicationResponse.setStatusMsg(message);
+		applicationResponse.setData(data);
+		return applicationResponse;
+	}
+
+}
