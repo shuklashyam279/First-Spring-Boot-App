@@ -18,12 +18,10 @@ import com.jspider.springbootsimplecrud.response.ApplicationResponse;
 public class CustomerService {
 
 	private final CustomerDao customerDao;
-	private final ApplicationResponse<Customer> applicationResponse;
 
 	@Autowired
-	public CustomerService(CustomerDao customerDao, ApplicationResponse<Customer> applicationResponse) {
+	public CustomerService(CustomerDao customerDao) {
 		this.customerDao = customerDao;
-		this.applicationResponse = applicationResponse;
 	}
 
 	/**
@@ -35,17 +33,17 @@ public class CustomerService {
 	public ApplicationResponse<Customer> saveCustomerService(Customer customer) {
 		Customer existingCustomer = customerDao.getCustomerByEmailDao(customer.getEmail());
 		if (existingCustomer != null) {
-			return createResponse(HttpStatus.BAD_REQUEST.value(), "Duplicate Data Entry.", customer);
+			return ApplicationResponse.create(HttpStatus.BAD_REQUEST, "Duplicate Data Entry.", customer);
 		}
 
 		Customer processedCustomer = ServiceUtils.trimExtraSpaces(customer);
 		Customer savedCustomer = customerDao.saveCustomerDao(processedCustomer);
 
 		if (savedCustomer == null) {
-			return createResponse(HttpStatus.INTERNAL_SERVER_ERROR.value(), "We're Sorry. Please Try Again Later",
+			return ApplicationResponse.create(HttpStatus.INTERNAL_SERVER_ERROR, "We're Sorry. Please Try Again Later",
 					null);
 		}
-		return createResponse(HttpStatus.OK.value(), "Data Stored Successfully", savedCustomer);
+		return ApplicationResponse.create(HttpStatus.OK, "Data Stored Successfully", savedCustomer);
 	}
 
 	/**
@@ -58,7 +56,7 @@ public class CustomerService {
 	public ApplicationResponse<Customer> getCustomerByIdService(int id) {
 		Customer customer = customerDao.getCustomerById(id);
 		if (customer != null) {
-			return createResponse(HttpStatus.OK.value(), "Data Fetched Successfully", customer);
+			return ApplicationResponse.create(HttpStatus.OK, "Data Fetched Successfully", customer);
 		} else {
 			throw new IdNotFoundException("Given Id Not Found...");
 		}
@@ -96,14 +94,14 @@ public class CustomerService {
 	public ApplicationResponse<Customer> deleteCustomerByIdService(int customerId) {
 		Customer existingCustomer = customerDao.getCustomerById(customerId);
 		if (existingCustomer == null) {
-			return createResponse(HttpStatus.NOT_FOUND.value(), "Customer Not Found", null);
+			return ApplicationResponse.create(HttpStatus.NOT_FOUND, "Customer Not Found", null);
 		}
 
 		boolean isDeleted = customerDao.deleteCustomerByIdDao(customerId);
 		if (isDeleted) {
-			return createResponse(HttpStatus.OK.value(), "Customer Deleted Successfully", existingCustomer);
+			return ApplicationResponse.create(HttpStatus.OK, "Customer Deleted Successfully", existingCustomer);
 		} else {
-			return createResponse(HttpStatus.INTERNAL_SERVER_ERROR.value(), "Failed to Delete Customer",
+			return ApplicationResponse.create(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to Delete Customer",
 					existingCustomer);
 		}
 	}
@@ -117,32 +115,17 @@ public class CustomerService {
 	public ApplicationResponse<Customer> updateCustomerService(Customer customer) {
 		Customer existingCustomer = customerDao.getCustomerById(customer.getId());
 		if (existingCustomer == null) {
-			return createResponse(HttpStatus.NOT_FOUND.value(), "Customer not found", customer);
+			return ApplicationResponse.create(HttpStatus.NOT_FOUND, "Customer not found", customer);
 		}
 
 		Customer processedCustomer = ServiceUtils.trimExtraSpaces(customer);
 		Customer updatedCustomer = customerDao.updateCustomerDao(processedCustomer);
 
 		if (updatedCustomer == null) {
-			return createResponse(HttpStatus.INTERNAL_SERVER_ERROR.value(), "Failed to update customer", customer);
+			return ApplicationResponse.create(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to update customer", customer);
 		}
 
-		return createResponse(HttpStatus.OK.value(), "Customer updated successfully", updatedCustomer);
-	}
-
-	/**
-	 * Helper method to create a standardized ApplicationResponse.
-	 * 
-	 * @param statusValue The HTTP status code of the response
-	 * @param message     A descriptive message about the response
-	 * @param data        The Customer data associated with the response
-	 * @return An ApplicationResponse object with the provided details
-	 */
-	private ApplicationResponse<Customer> createResponse(int statusValue, String message, Customer data) {
-		applicationResponse.setStatusCode(statusValue);
-		applicationResponse.setStatusMsg(message);
-		applicationResponse.setData(data);
-		return applicationResponse;
+		return ApplicationResponse.create(HttpStatus.OK, "Customer updated successfully", updatedCustomer);
 	}
 
 }
