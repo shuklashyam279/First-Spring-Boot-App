@@ -1,13 +1,11 @@
 package com.jspider.springbootsimplecrud.response;
 
-import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 
 import lombok.Data;
 
 @Data
-@Component
 public class ApplicationResponse<T> {
 	
 	private HttpStatus statusCode;
